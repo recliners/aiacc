@@ -27,7 +27,7 @@ public class Test {
 
 ---
 
-![example picture](C:/Users/ling/Desktop/git-test/aiacc/images/img.png)
+![example picture](.images/img.png)
  *figure 1*
 
 This is a formula:
