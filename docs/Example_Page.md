@@ -31,16 +31,45 @@ reg [32:0] cnt1,cnt2,cnt3; //三个位宽为32位的寄存器
 它可以在always语句和initial语句中使用。
 如果该过程语句描述的是时序逻辑，即always语句带有时钟信号，则该寄存器变量对应为寄存器；如果该过程语句描述的是组合逻辑，即always语句不带有时钟信号，则该寄存器变量对应为硬件连线；
 
-**类型**
+**线网类型**通常用wire关键字说明线网类型，它代表元件间的物理连线。它的值由驱动元件的值决定如果没有驱动元件连接到线网，线网的缺省值为z（高阻态）。
+```verilog
+wire [3:0] Sat; // Sat为4位线型信号
+wire Cnt; // Cnt为1位线型信号
+wire [31:0] A, B, C;// A,B,C都是32位的线型信号
+```
+由于线网类型代表的是物理连接线，因此其不存储逻辑值，必须由器件驱动。通常用assign进行赋值，如 
+```verilog
+wire [3:0] B,C;
+wire [4:0] A;
+assign A = B + C;
+```
+没有定义信号数据类型时，缺省为wire类型。
 
-
-
+reg型信号并不一定生成寄存器。针对什么时候使用wire类型，什么时候用reg类型这一问题给出的建议是，在本模块中使用always设计的信号都定义为reg型，其他信号都定义为wire型。
+例如：
+```verilog
+always @(posedge clk or negedge rst_n) begin
+    if (rst_n==0) begin
+        cnt1 <= 0; 
+    end
+    else if(add_cnt1) begin
+        if(end_cnt1)
+            cnt1 <= 0;
+        else
+            cnt1 <= cnt1 + 1; 
+        end
+    end
+assign add_cnt1 = end_cnt0;
+assign end_cnt1 = add_cnt1 && cnt1 == 8-1;
+```
 ![example picture](/images/D-Flip-Flop.png)
 <div style="text-align: center;">
 图3.1 D触发器图片
 </div>
 
-图3.1为D触发器的基本图片，
+图3.1为D触发器的基本图片，图 1.3- 37是 D 触发器的结构图，可以将其视为一个芯片，该芯片拥有 4 个管脚，其中 3 个是
+输入管脚：时钟 clk、复位 rst_n、信号 d ；1 个是输出管脚：q。
+该芯片的功能如下：当给管脚 rst_n 给低电平（复位有效），即赋值为0 时，输出管脚 q 处于低 电平状态。如果管脚 rst_n 为高电平，则观察管脚 clk 的状态，当 clk 信号由 0 变 1 即处于上升沿的 时候，将此时d 的值赋给 q。若 d 是低电平，则 q 也是低电平；若 d 是高电平，则 q 也是高电平。
 ### 2.1模块案例与介绍
 模块有五个主要部分：端口定义、参数定义（可选）、 I/O 说明、内部信号声明、功能定义。
 以下是一个经典的verilog模块：
