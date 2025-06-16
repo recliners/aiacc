@@ -1,5 +1,5 @@
 # Summary
 
 * [Introduction](README.md)
-* [Example Page](Example_Page.md)
-
+* [verilog](verilog.md)
+* [vcs+verdi](vcs+verdi.md)
