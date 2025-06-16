@@ -93,7 +93,7 @@ inv 		inv(
 			);
 
 initial begin
-		aa<=0;
+		aa<=0;      //reg类型的的变量用<=
 	#10	aa<=1;
 	#10	aa<=0;
 	#10	aa<=1;
@@ -145,5 +145,65 @@ tb_inv.v inv.v timescale.v
 vcs -R -full64 +v2k -fsdb +define+FSDB -sverilog -f file.f -l run.log
 ```
 当然，还有更简便的用法，不过我暂时没有研究，有待后续补充。
+
+### 2.2 与非门
+
+在数字逻辑电路中，​​与非门​​（NAND Gate）是最重要、最常用的​​复合逻辑门​​之一。它的名称来源于其功能：​​先执行“与”操作，再执行“非”操作​​。其真值表为：
+|输入A|输入B|输出Y|
+|----|----|----|
+| 0 | 0 | 1 |
+| 1 | 0 | 1 |
+| 0 | 1 | 1 |
+| 1 | 1 | 0 |
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+nand.v:
+```verilog
+module nand_gate(
+		A,
+		B,
+		Y
+		);
+input		A;
+input		B;
+output		Y;
+
+assign		Y=~(A&B); //先与后非
+endmodule
+```
+
+tb_nand.v:
+```verilog
+//testbench
+module nand_gate_tb;
+reg		aa,bb;
+wire		yy;
+nand_gate 	nand_gate(
+			.A(aa),
+			.B(bb),
+			.Y(yy)
+			);
+
+initial begin
+		aa<=0;bb<=0;
+	#10	aa<=0;bb<=1;
+	#10	aa<=1;bb<=0;
+	#10	aa<=1;bb<=1;
+	#10	$finish;
+end
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_nand.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/nand1.png)
 
 
