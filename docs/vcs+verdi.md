@@ -206,4 +206,64 @@ endmodule
 最后结果展示：
 ![example picture](/images/nand1.png)
 
+### 2.3 四位与非门
+
+四位与非门是与非门​的进阶版，具体是什么意思举个例子就可以：
+A = 4'b0011
+B = 4'b1110
+C = ~(A&B) = 4'b1101
+四位与非门就是将每一位进行与非计算，最后和到一起就可以。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+nand_4bits.v:
+```verilog
+module nand_gate_4bits(
+		A,
+		B,
+		Y
+		);
+input[3:0]	A;
+input[3:0]	B;
+output[3:0]	Y;
+
+assign		Y=~(A&B); //先与后非
+endmodule
+```
+
+tb_nand_4bits.v:
+```verilog
+//testbench
+module nand_gate_4bits_tb;
+reg[3:0]	aa,bb;
+wire[3:0]	yy;
+nand_gate_4bits 	nand_gate_4bits(
+			.A(aa),
+			.B(bb),
+			.Y(yy)
+			);
+
+initial begin
+		aa<=4'b0000;bb<=4'b1111;
+	#10	aa<=4'b0010;bb<=4'b0110;
+	#10	aa<=4'b0111;bb<=4'b0100;
+	#10	aa<=4'b1111;bb<=4'b1110;
+	#10	$finish;
+end
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_nand.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/nand2.png)
+
+
+
 
