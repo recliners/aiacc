@@ -266,5 +266,158 @@ endmodule
 ![example picture](/images/nand2.png)
 
 
+### 2.4 选择器
 
+选择器是数字逻辑电路中常见的一种器件，其通常的效果是当达成某种条件就进行某些操作，这里放一种常见的选择器。
+![example picture](/images/fn.png)
+
+该模块fn_sw的功能为：
+
+当sel为0时y是a与b的与；
+当sel为1时y是a与b的异或。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+fn_sw.v:
+```verilog
+module fn_sw(
+		a,
+		b,
+		sel,
+		y
+		);
+input		a;
+input		b;
+input		sel;
+output		y;
+
+reg		y;	//这里是因为always里赋值的变量必须是reg型
+
+always@(a or b or sel)
+begin
+	if(sel==1) begin
+		y<=a^b;
+	end
+	else begin
+		y<=a&b;
+	end
+end
+		//上面这段always代码也可以改成 
+		//assign  y=sel?(a^b):(a&b);
+endmodule
+```
+
+tb_fn_sw.v:
+```verilog
+module	fn_sw_tb;
+reg		a,b,sel;
+wire		y;
+fn_sw fn_sw(
+		.a(a),
+		.b(b),
+		.sel(sel),
+		.y(y)
+		);
+
+initial begin
+		a<=0;b<=0;sel<=0;
+	#10	a<=0;b<=0;sel<=1;
+	#10	a<=0;b<=1;sel<=0;
+	#10	a<=0;b<=1;sel<=1;
+	#10	a<=1;b<=0;sel<=0;
+	#10	a<=1;b<=0;sel<=1;
+	#10	a<=1;b<=1;sel<=0;
+	#10	a<=1;b<=1;sel<=1;
+	#10	$finish;
+end
+
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_fn_sw.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/fn2.png)
+
+### 四位选择器
+
+四位选择器选择器是选择器的一种进阶功能，本次设计的四位选择器fn_sw_4功能为：
+
+当sel为00时y是a与b的与；
+当sel为01时y是a与b的或；
+当sel为10时y是a与b的异或；
+当sel为11时y是a与b的同或。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+fn_sw_4.v:
+```verilog
+module fn_sw_4(
+		a,
+		b,
+		sel,
+		y
+		);
+input		a;
+input		b;
+input[1:0]	sel;
+output		y;
+
+reg		y;
+
+always@(a or b or sel)
+begin
+	case(sel)
+	2'b00:begin y<=a&b;end
+	2'b01:begin y<=a|b;end
+	2'b10:begin y<=a^b;end
+	2'b11:begin y<=~(a^b);end
+	endcase
+end
+
+endmodule
+```
+
+tb_fn_sw.v:
+```verilog
+module	fn_sw_4_tb;
+reg[3:0]	absel;
+wire		y;
+fn_sw_4 fn_sw_4(
+		.a(absel[0]),
+		.b(absel[1]),
+		.sel(absel[3:2]),
+		.y(y)
+		);
+
+initial begin
+		absel<=0;
+	#200	$stop;
+end
+
+always #10 absel<=absel+1;
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_fn_sw_4.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+注：#200	$stop;这句话也可以改成#200 $finish，如果用的stop，则需要在终端卡住的时候输入finish手动结束，不过我看网上当说使用stop的时候应该输入run或者run-all，但是当我输入run的时候会一直进行，然后怎么都退不掉，所以个人建议还是使用finish为好，至于原因个人不太清楚，感兴趣可以去看看。
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/fn3.png)
+
+这个结果在使用该代码进行测试的时候不会出现absel这一栏的结果，这个结果主要是为了看他的值是多少，有没有将所有的结果遍历。想要出现以上的结果需要按照以下步骤进行：
+![example picture](/images/fn4.png)
 
