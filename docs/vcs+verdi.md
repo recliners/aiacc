@@ -345,7 +345,7 @@ endmodule
 最后结果展示：
 ![example picture](/images/fn2.png)
 
-### 四位选择器
+### 2.5 四位选择器
 
 四位选择器选择器是选择器的一种进阶功能，本次设计的四位选择器fn_sw_4功能为：
 
@@ -420,4 +420,72 @@ endmodule
 
 这个结果在使用该代码进行测试的时候不会出现absel这一栏的结果，这个结果主要是为了看他的值是多少，有没有将所有的结果遍历。想要出现以上的结果需要按照以下步骤进行：
 ![example picture](/images/fn4.png)
+
+### 2.6 原码转换补码
+
+正数补码与原码相同；
+
+负数补码转换方法是符号位不变，幅度按位取反加1.
+
+所以对于转换方式有个比较大致的思路。首先先判断这个数是正数还是负数，正数的话结果就是原结果，负数的话结果就先将除符号位的其他几位取反加1，最后再加上符号位。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+fn_sw_4.v:
+```verilog
+module comp_conv(
+		a,
+		a_comp
+		);
+input[7:0]	a;
+output[7:0]	a_comp;
+
+wire[6:0]	b;//按位取反的幅度位
+wire[7:0]	y;//负数的补码
+
+assign		b=~a[6:0];
+assign		y[6:0]=b+1;//按位取反+1
+assign		y[7]=a[7];//符号位不变
+
+assign		a_comp=a[7]?y:a;
+
+
+endmodule
+```
+
+tb_comp_conv.v:
+```verilog
+module comp_conv_tb;
+reg[7:0]	a_in;
+wire[7:0]	y_out;
+comp_conv	comp_conv(
+			.a(a_in),
+			.a_comp(y_out)
+			);
+
+initial begin
+		a_in<=0;
+	#3000	$finish;
+end
+
+always #10 a_in<=a_in+1;
+
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_comp_conv.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/comp1.png)
+
+![example picture](/images/comp2.png)
+
+有的人的表示可能是十六进制的，这样不方便看原码和补码到底是什么，想要变成二进制的话有可以按住Alt键，之后依次点击W、R、B能选择二进制。也可以按照下图的方式进行点击：
+![example picture](/images/comp3.png)
 
