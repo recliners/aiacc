@@ -489,3 +489,137 @@ endmodule
 有的人的表示可能是十六进制的，这样不方便看原码和补码到底是什么，想要变成二进制的话有可以按住Alt键，之后依次点击W、R、B能选择二进制。也可以按照下图的方式进行点击：
 ![example picture](/images/comp3.png)
 
+### 2.7 七段码译码器
+
+七段码译码器就是大家熟悉的数码管。
+![example picture](/images/dec1.png)
+
+他的用出有很多，不如说红绿灯、定时器、指示灯等等，其由七条线以及一个点组成，我们将最上面的一横记作a，之后顺时针依次为b,c,d,e,f，最中间的记为g。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+seg_dec.v:
+```verilog
+module seg_dec(
+		num,
+		a_g
+		);
+input[3:0]	num;
+output[6:0]	a_g;
+
+reg[6:0]	a_g;//a_g={a,b,c,d,e,f,g}
+always @(num) begin
+	case(num)
+	4'd0:begin a_g<=7'b1111110;end
+	4'd1:begin a_g<=7'b0110000;end
+	4'd2:begin a_g<=7'b1101101;end
+	4'd3:begin a_g<=7'b1111001;end
+	4'd4:begin a_g<=7'b0110011;end
+	4'd5:begin a_g<=7'b1011011;end
+	4'd6:begin a_g<=7'b1011111;end
+	4'd7:begin a_g<=7'b1110000;end
+	4'd8:begin a_g<=7'b1111111;end
+	4'd9:begin a_g<=7'b1111011;end
+	default:begin a_g<=7'b0000001;end
+	endcase
+end
+
+endmodule
+```
+
+tb_seg_dec.v:
+```verilog
+module seg_dec_tb;
+reg[3:0]	num;
+wire[7:0]	a_g;
+seg_dec		seg_dec(
+			.num(num),
+			.a_g(a_g)
+			);
+
+initial begin
+		num<=0;
+	#100	$finish;
+end
+
+always #10 num<=num+1;
+
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_seg_dec.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/dec.png)
+
+### 2.8 计数器
+
+计数器，顾名思义就是计数用的，这次的设计是时钟信号没经过一次上升沿计数器就加一。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+counter.v:
+```verilog
+module counter(
+		clk,
+		res,
+		y
+
+		);
+input		clk;
+input		res;
+output[7:0]	y;
+
+wire[7:0]	sum;//+1yun suan jie guo
+assign		sum=y+1;//zu he luo ji bu fen
+reg[7:0]	y;
+
+always@(posedge clk or negedge res)
+	if(~res)begin
+		y<=0;
+	end
+	else begin
+		y<=sum;
+	end
+
+endmodule
+```
+
+tb_counter.v:
+```verilog
+module	counter_tb();
+reg		clk,res;
+wire[7:0]	y;		
+counter counter(
+		.clk(clk),
+		.res(res),
+		.y(y)
+		);
+
+initial begin
+		clk<=0;	res<=0;
+	#17	res<=1;
+	#6000	$finish;
+end
+
+always	#5 clk<=~clk;
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_counter.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/counter1.png)
+
