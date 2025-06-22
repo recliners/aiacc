@@ -622,5 +622,3 @@ endmodule
 定时与2.1一致。
 最后结果展示：
 ![example picture](/images/counter1.png)
-
-1
