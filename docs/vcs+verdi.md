@@ -623,3 +623,73 @@ endmodule
 最后结果展示：
 ![example picture](/images/counter1.png)
 
+### 2.9 4级伪随机码发生器
+
+**伪随机码发生器**是一种​​电子设备或算法​​，它能生成一个​​看似随机​​的比特或符号序列，但实际上这个序列是由​​确定性的算法​​生成的，并且可以​​完全重复​​。
+
+4级伪随机码发生器是由4个伪随机码发生器级联而成，本次所设计的4级伪随机码发生器具体形状如下图所示：
+![example picture](/images/gen1.png)
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+seg_dec.v:
+```verilog
+module seg_dec(
+		num,
+		a_g
+		);
+input[3:0]	num;
+output[6:0]	a_g;
+
+reg[6:0]	a_g;//a_g={a,b,c,d,e,f,g}
+always @(num) begin
+	case(num)
+	4'd0:begin a_g<=7'b1111110;end
+	4'd1:begin a_g<=7'b0110000;end
+	4'd2:begin a_g<=7'b1101101;end
+	4'd3:begin a_g<=7'b1111001;end
+	4'd4:begin a_g<=7'b0110011;end
+	4'd5:begin a_g<=7'b1011011;end
+	4'd6:begin a_g<=7'b1011111;end
+	4'd7:begin a_g<=7'b1110000;end
+	4'd8:begin a_g<=7'b1111111;end
+	4'd9:begin a_g<=7'b1111011;end
+	default:begin a_g<=7'b0000001;end
+	endcase
+end
+
+endmodule
+
+```
+
+tb_seg_dec.v:
+```verilog
+module seg_dec_tb;
+reg[3:0]	num;
+wire[7:0]	a_g;
+seg_dec		seg_dec(
+			.num(num),
+			.a_g(a_g)
+			);
+
+initial begin
+		num<=0;
+	#100	$finish;
+end
+
+always #10 num<=num+1;
+
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_seg_dec.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/dec.png)
+
