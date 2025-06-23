@@ -631,57 +631,57 @@ endmodule
 ![example picture](/images/gen1.png)
 
 接下来我将各个部分代码贴出，具体测试流程与2.1一致。
-seg_dec.v:
+gen.v:
 ```verilog
-module seg_dec(
-		num,
-		a_g
+module m_gen(
+		clk,
+		res,
+		y
 		);
-input[3:0]	num;
-output[6:0]	a_g;
 
-reg[6:0]	a_g;//a_g={a,b,c,d,e,f,g}
-always @(num) begin
-	case(num)
-	4'd0:begin a_g<=7'b1111110;end
-	4'd1:begin a_g<=7'b0110000;end
-	4'd2:begin a_g<=7'b1101101;end
-	4'd3:begin a_g<=7'b1111001;end
-	4'd4:begin a_g<=7'b0110011;end
-	4'd5:begin a_g<=7'b1011011;end
-	4'd6:begin a_g<=7'b1011111;end
-	4'd7:begin a_g<=7'b1110000;end
-	4'd8:begin a_g<=7'b1111111;end
-	4'd9:begin a_g<=7'b1111011;end
-	default:begin a_g<=7'b0000001;end
-	endcase
-end
+input		clk;
+input		res;
+output		y;
+
+reg[3:0]	d;
+assign		y=d[0];
+
+
+always@(posedge clk or negedge res)
+	if(~res)begin
+		d<=4'b1111;
+	end
+	else begin
+		d[2:0]<=d[3:1];//右移一位
+		d[3]<=d[3]+d[0];//模2加
+	end
 
 endmodule
 
 ```
 
-tb_seg_dec.v:
+tb_gen.v:
 ```verilog
-module seg_dec_tb;
-reg[3:0]	num;
-wire[7:0]	a_g;
-seg_dec		seg_dec(
-			.num(num),
-			.a_g(a_g)
-			);
+module	m_gen_tb();
+reg		clk,res;
+wire		y;		
+m_gen m_gen(
+		.clk(clk),
+		.res(res),
+		.y(y)
+		);
 
 initial begin
-		num<=0;
-	#100	$finish;
+		clk<=0;	res<=0;
+	#17	res<=1;
+	#600	$finish;
 end
 
-always #10 num<=num+1;
-
+always	#5 clk<=~clk;
 
 `ifdef FSDB
 initial begin
-	$fsdbDumpfile("tb_seg_dec.fsdb");
+	$fsdbDumpfile("tb_gen.fsdb");
 	$fsdbDumpvars;
 end
 `endif
@@ -691,5 +691,101 @@ endmodule
 
 定时与2.1一致。
 最后结果展示：
-![example picture](/images/dec.png)
+![example picture](/images/gen2.png)
+
+### 2.10 秒计数器
+
+秒计数器的计数范围是0-9，假设clk是24MHz系统时钟，秒分频产生秒脉冲s_pulse；秒技术模块对秒脉冲计数，计数范围是0-9，秒计数结果是s_num（位宽4）。
+
+接下来我将各个部分代码贴出，具体测试流程与2.1一致。
+gen.v:
+```verilog
+module s_counter(
+    clk,
+    res,
+    s_num
+);
+input    clk;
+input    res;
+output[3:0]    s_num;
+
+parameter    frequency_clk=24;  // 24MHz
+reg[24:0]    con_t;
+reg        s_pulse;  // 秒脉冲信号
+reg[3:0]    s_num;
+
+always@(posedge clk or negedge res) begin  // 添加begin包裹整个always块
+    if(~res) begin
+        con_t <= 0;
+        s_pulse <= 0;
+        s_num <= 0;
+    end
+    else begin
+        // 计数器逻辑
+        if(con_t == frequency_clk*1000000 - 1) begin
+            con_t <= 0;
+        end
+        else begin
+            con_t <= con_t + 1;
+        end
+
+        // 秒脉冲生成
+        if(con_t == 0) begin
+            s_pulse <= 1;
+        end
+        else begin
+            s_pulse <= 0;
+        end
+
+        // 秒计数器逻辑 - 修改为单独处理
+        if(s_pulse) begin  // 检测到秒脉冲时清零
+            s_num <= 0;
+        end
+        else if(s_num == 9) begin  // 普通进位逻辑
+            s_num <= 0;
+        end
+        else begin
+            s_num <= s_num + 1;
+        end
+    end
+end  // 包裹always块的end
+
+endmodule
+
+```
+
+tb_gen.v:
+```verilog
+module	counter_tb();
+reg		clk,res;
+wire[3:0]	s_num;		
+s_counter s_counter(
+		.clk(clk),
+		.res(res),
+		.s_num(s_num)
+		);
+
+initial begin
+		clk<=0;	res<=0;
+	#17	res<=1;
+	#1000	$finish;
+end
+
+always	#5 clk<=~clk;
+
+`ifdef FSDB
+initial begin
+	$fsdbDumpfile("tb_s_counter.fsdb");
+	$fsdbDumpvars;
+end
+`endif
+
+endmodule
+```
+
+定时与2.1一致。
+最后结果展示：
+![example picture](/images/s_counter1.png)
+
+
 
