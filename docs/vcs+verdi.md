@@ -787,5 +787,255 @@ endmodule
 最后结果展示：
 ![example picture](/images/s_counter1.png)
 
+还有一些实例暂时还未复刻，等复刻之后再进行补充。
+
+## 3 具体目标狱程序设计
+
+### 3.1 FIFO
+
+#### 3.1.1 目标任务
+
+Verilog 编程练习：设计一个参数化的同步FIFO
+目标：
+掌握同步时序逻辑设计。
+理解FIFO（First-In, First-Out，先入先出队列）的工作原理。
+学习使用参数（parameter）进行模块化和可重用设计。
+掌握基本状态信号（空、满）的产生逻辑。
+练习编写简单的Verilog测试平台（Testbench）。
+
+题目描述：
+设计一个同步FIFO模块。该FIFO应具有可配置的数据宽度（DATA_WIDTH）和深度（DEPTH）。FIFO的操作应严格遵循时钟信号，并提供“满”（full）和“空”（empty）状态指示信号。
+
+设计要求：
+1.参数化：
+使用 parameter 定义数据宽度 DATA_WIDTH (默认值 8)。
+使用 parameter 定义FIFO深度 DEPTH (默认值 16)。假设 DEPTH 总是2的幂次方，以便简化地址指针逻辑。
+2.接口（Ports）：
+|  端口名  |   方向	 |   位宽	|  描述  |
+|---|---|----|----|
+|clk|input	|1	   |时钟信号|
+|rst_n	|input	|1	   |异步复位信号，低电平有效|
+|wr_en	|input	|1	   |写使能信号|
+|w_data	|input	|DATA_WIDTH	|写入FIFO的数据|
+|rd_en	|input	|1	|读使能信号|
+|r_data	|output	|DATA_WIDTH	|从FIFO读出的数据|
+|full	|output	|1	|FIFO满状态标志 (1 = 满, 0 = 未满)|
+|empty	|output	|1	|FIFO空状态标志 (1 = 空, 0 = 非空)|
+
+3.编程语言：基于verilog-2001和verilog-95，有适当的注释。
+4.Testbench Verilog代码 (fifo_tb.v)：编写一个测试平台来验证你的FIFO设计。要求交付测试计划，测试计划中包含要测试哪些功能和收集哪些覆盖率；按照测试计划完成测试；输出测试结果文档（说明针对计划的结果）。
+5.基于Xilinx的Vivado进行设计和验证，任选FPGA型号。
+
+交付结果：
+1）设计文件
+2）验证文件及测试向量
+3）测试计划文档和测试结果文档。
+
+其他要求：
+1）不要求统一的完成时间，每个人按照自己可投入的时间规划完成实践目标，第一周汇报的时候报一下目标完成时间
+2）每周汇报进展和收获
 
 
+#### 3.1.2 计数器
+
+计数器是设计FIFO的基本格式，FIFO的设计建立在计数器的设计之上，本计数器不是第二章给出的历程中的计数器，第二章的历程只能实现累加与清零，本计数器要实现累加、清零以及累减等功能。
+
+下面给出设计后的代码，并对代码做出详细注释。
+
+```verilog
+// 定义模块名称为"tst"
+module tst
+(
+    // 输入输出端口定义
+    input        clk,     // 系统时钟输入
+    input        rst_n,   // 低电平有效的异步复位信号
+    input        en,      // 计数使能信号，高电平有效
+    input [31:0] cfg_max, // 32位配置的最大计数值输入
+    output reg [31:0] cnt // 32位计数器输出（寄存器类型）
+);
+
+// 定义状态机的状态编码（使用参数）
+parameter IDLE = 2'd0; // 空闲状态（不计数）
+parameter INC  = 2'd1; // 递增计数状态
+parameter DEC  = 2'd2; // 递减计数状态
+
+// 状态寄存器声明
+reg [1:0] stat;       // 当前状态寄存器
+reg [1:0] stat_next;  // 下一状态逻辑（组合逻辑输出）
+
+// 组合逻辑连线声明
+wire max_pre_vld;     // 指示即将达到最大值的标志（cnt == cfg_max_limit - 1）
+wire one_vld;         // 指示计数值为1的标志（cnt == 1）
+wire [31:0] cfg_max_limit; // 处理后的有效最大值配置（确保至少为1）
+
+// 处理配置最大值：如果cfg_max为0，则使用最小值1，否则使用cfg_max的值
+assign cfg_max_limit = (cfg_max == 32'd0) ? 32'd1 : cfg_max;
+
+// 状态寄存器更新（时序逻辑）
+always @(posedge clk or negedge rst_n)
+begin
+    if (!rst_n)       // 异步复位（低电平有效）
+        stat <= IDLE; // 复位到IDLE状态
+    else
+        stat <= stat_next; // 正常工作时更新为下一状态
+end
+
+// 下一状态逻辑（组合逻辑）
+always @(*)
+begin
+    case(stat) // 根据当前状态决定状态转移
+        IDLE: begin  // 空闲状态
+            if (en)          // 当使能有效
+                stat_next = INC;  // 转移到递增状态
+            else
+                stat_next = IDLE; // 保持空闲状态
+        end
+        
+        INC: begin   // 递增计数状态
+            if (~en)             // 当使能无效
+                stat_next = IDLE;  // 返回空闲状态
+            else if (max_pre_vld) // 检测到即将达到最大值
+                stat_next = DEC;   // 转移到递减状态
+            else
+                stat_next = INC;   // 保持递增状态
+        end
+
+        DEC: begin   // 递减计数状态
+            if (~en)         // 当使能无效
+                stat_next = IDLE;  // 返回空闲状态
+            else if (one_vld)      // 检测到计数值为1
+                stat_next = INC;   // 转移到递增状态
+            else
+                stat_next = DEC;   // 保持递减状态
+        end
+
+        default: stat_next = IDLE; // 默认情况返回空闲状态
+    endcase
+end
+
+// 计数器逻辑（时序逻辑）
+always @(posedge clk or negedge rst_n)
+begin
+    if (!rst_n)           // 异步复位
+        cnt <= 32'd0;     // 计数器清零
+    else if (stat == IDLE) // 处于空闲状态
+        cnt <= 32'd0;     // 计数器清零
+    else if (stat == INC)  // 处于递增状态
+        cnt <= cnt + 32'd1; // 计数器加1
+    else if (stat == DEC)  // 处于递减状态
+        cnt <= cnt - 32'd1; // 计数器减1
+end
+
+// 组合逻辑：检测是否即将达到最大值（下个时钟周期将到达cfg_max_limit）
+assign max_pre_vld = (cnt == cfg_max_limit - 32'd1);
+
+// 组合逻辑：检测计数值是否恰好为1
+assign one_vld = (cnt == 32'd1);
+
+// 模块定义结束
+endmodule
+
+```
+
+tb代码：
+```verilog
+// 定义测试模块名为tb
+module tb;
+
+// 定义变量用于波形dump控制
+int	fsdbDump;    
+// 定义随机数种子变量
+integer	seed;       
+
+// 定义测试信号
+logic	clk;       // 时钟信号
+logic	rstn;      // 复位信号（低有效）
+logic	[31:0] cnt;// 来自DUT的计数器输出
+reg	en;          // 使能信号
+
+// 设置时间显示格式（-9表示纳秒，3位小数）
+initial	$timeformat(-9, 3, " ns", 0);
+
+// 初始化块：处理仿真参数
+initial
+begin
+    // 尝试从命令行获取随机种子，默认设为100
+    if(!$value$plusargs("seed=%d", seed))
+        seed = 100;
+    $srandom(seed);    // 设置随机数种子
+    $display("seed=%d\n", seed); // 显示当前种子值
+
+    // 尝试从命令行获取波形dump标志，默认设为1（开启）
+    if(!$value$plusargs("fsdbDump=%d", fsdbDump))
+        fsdbDump = 1;
+    if(fsdbDump)  // 如果开启波形dump
+    begin
+        $fsdbDumpfile("tb.fsdb");  // 创建波形文件
+        $fsdbDumpvars(0);         // dump所有变量
+    end
+end
+
+// 时钟生成：40MHz方波（周期25ns）
+initial
+begin
+    clk = 1'b0;  // 初始时钟为0
+    forever       // 永久循环
+    begin
+        #(1e9/(2.0 * 40e6)) clk = ~clk; // 12.5ns后翻转时钟（半个周期）
+    end
+end
+
+// 复位信号控制
+initial
+begin
+    rstn = 0;    // 初始复位有效
+    #30 rstn = 1; // 30ns后释放复位
+end
+
+// 主测试逻辑
+initial
+begin
+    en = 0;      // 初始使能无效
+    
+    // 等待复位释放
+    @(posedge rstn);
+    #100;        // 再等待100ns
+    
+    // 在下一个时钟上升沿后使能有效
+    @(posedge clk);
+    #1;          // 避免竞争（在时钟沿后1ns）
+    en = 1;      // 使能计数
+
+    // 运行1000ns（约40个时钟周期）
+    #1000;
+    
+    // 在下一个时钟上升沿后禁用计数
+    @(posedge clk);
+    #1;
+    en = 0;
+
+    // 等待100ns后结束仿真
+    #100;
+    $finish;     // 结束仿真
+end
+
+// 实例化被测设计(DUT)
+tst	tst(
+    .clk(clk),     // 连接时钟
+    .rst_n(rstn),  // 连接复位
+    .en(en),       // 连接使能
+    .cfg_max(5),   // 配置最大值为5（固定）
+    .cnt(cnt)      // 连接计数器输出
+);
+
+endmodule
+```
+另外不要忘了时间的设置，我这里是和之前一样单独放在一个文件里，代码为:
+```verilog
+`timescale 1ns/10ps
+```
+
+最后分析一下显示结果：
+![example picture](/images/fifo1.png)
+
+根据该结果可以发现，当复位信号为0时，计数器结果不进行变动，当复位信号变为1时，由于stat为0，所以计数器继续不进行操作。当stat为1时，系统开始进行累加，cnt的数值增加，一直增加到给定的最大值为5，后面stat为2，cnt开始减小，之后一直重复直到复位信号归于0结束。
