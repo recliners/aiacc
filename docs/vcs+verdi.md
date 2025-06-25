@@ -1039,3 +1039,320 @@ endmodule
 ![example picture](/images/fifo1.png)
 
 根据该结果可以发现，当复位信号为0时，计数器结果不进行变动，当复位信号变为1时，由于stat为0，所以计数器继续不进行操作。当stat为1时，系统开始进行累加，cnt的数值增加，一直增加到给定的最大值为5，后面stat为2，cnt开始减小，之后一直重复直到复位信号归于0结束。
+
+#### 3.2.3 FIFO
+
+FIFO大致功能为
+
+```verilog
+// 同步 FIFO (先进先出) 存储器模块
+module tst
+#(
+    // 参数定义
+    parameter	DEPTH_WIDTH = 4,      // FIFO地址宽度，决定存储深度
+    parameter	DEPTH = 16,            // FIFO实际存储深度
+    parameter	DATA_WIDTH = 8        // 数据位宽
+)
+(
+    // 输入/输出端口定义
+    input				clk,         // 时钟信号
+    input				rst_n,       // 异步低电平复位信号
+
+    // 数据端口
+    input				wr_en,       // 写使能信号
+    input				rd_en,       // 读使能信号
+    input		[DATA_WIDTH-1:0]	w_data,     // 写入数据总线
+    output	reg	[DATA_WIDTH-1:0]	r_data,     // 读出数据总线
+    output	reg			r_data_vld,  // 读出数据有效标志
+
+    // FIFO 状态信号
+    input		[DEPTH_WIDTH-1:0]	cfg_almost_full,   // 可配置的几乎满阈值
+    input		[DEPTH_WIDTH-1:0]	cfg_almost_empty,  // 可配置的几乎空阈值
+    output				almost_full,        // 几乎满标志
+    output				almost_empty,       // 几乎空标志
+    output				full,               // 满标志
+    output				empty,              // 空标志
+    output		[DEPTH_WIDTH:0]	fifo_num            // FIFO中当前数据数量
+);
+
+    // 内部信号声明
+    wire		[DEPTH_WIDTH-1:0]	ram_wr_ptr;   // RAM写指针（实际地址）
+    wire		[DEPTH_WIDTH-1:0]	ram_rd_ptr;   // RAM读指针（实际地址）
+    reg		[DEPTH_WIDTH:0]	ram_wr_ptr_exp; // 扩展写指针（含最高位用于空满判断）
+    reg		[DEPTH_WIDTH:0]	ram_rd_ptr_exp; // 扩展读指针（含最高位用于空满判断）
+    reg		[DATA_WIDTH-1:0]	my_memory[0:DEPTH-1]; // FIFO存储阵列
+    integer				ii;               // 循环变量
+
+    // 从扩展写指针中提取实际RAM写地址
+    assign ram_wr_ptr = ram_wr_ptr_exp[DEPTH_WIDTH-1:0];
+
+    // 写指针控制逻辑
+    always @(posedge clk or negedge rst_n)
+    begin
+        if(!rst_n)
+            // 复位：指针清零
+            ram_wr_ptr_exp <= {(DEPTH_WIDTH+1){1'b0}};
+        else if(wr_en)
+        begin
+            if(ram_wr_ptr_exp < DEPTH + DEPTH-1)
+                // 正常递增
+                ram_wr_ptr_exp <= ram_wr_ptr_exp+1;
+            else
+                // 回绕到0（当指针超过2*DEPTH-1时）
+                ram_wr_ptr_exp <= {(DEPTH_WIDTH+1){1'b0}};
+        end
+    end
+
+    // 从扩展读指针中提取实际RAM读地址
+    assign ram_rd_ptr = ram_rd_ptr_exp[DEPTH_WIDTH-1:0];
+
+    // 读指针控制逻辑（修正后：使用rd_en而不是r_data）
+    always @(posedge clk or negedge rst_n)
+    begin
+        if(!rst_n)
+            // 复位：指针清零
+            ram_rd_ptr_exp <= {(DEPTH_WIDTH+1){1'b0}};
+        else if(rd_en)  // 关键修正：仅当读使能有效时更新
+        begin
+            if(ram_rd_ptr_exp < DEPTH + DEPTH-1)
+                // 正常递增
+                ram_rd_ptr_exp <= ram_rd_ptr_exp+1;
+            else
+                // 回绕到0（当指针超过2*DEPTH-1时）
+                ram_rd_ptr_exp <= {(DEPTH_WIDTH+1){1'b0}};
+        end
+    end
+
+    // 计算FIFO当前数据数量（扩展指针差）
+    assign fifo_num = ram_wr_ptr_exp - ram_rd_ptr_exp;
+
+    // FIFO状态标志产生逻辑
+    // 满标志：数据量等于深度 或 在特定操作下即将变满
+    assign full = (fifo_num == DEPTH) | 
+                 ((fifo_num == DEPTH-1) & wr_en & (~rd_en));
+    
+    // 空标志：数据量为0 或 在特定操作下即将变空
+    assign empty = (fifo_num == 0) | 
+                  ((fifo_num == 1) & rd_en & (~wr_en));
+    
+    // 几乎满标志：达到配置值或在特定操作下即将达到
+    assign almost_full = (fifo_num >= cfg_almost_full) | 
+                        ((fifo_num == cfg_almost_full-1) & wr_en & (~rd_en));
+    
+    // 几乎空标志：达到配置值或在特定操作下即将达到
+    assign almost_empty = (fifo_num <= cfg_almost_empty) | 
+                         ((fifo_num == cfg_almost_empty+1) & rd_en & (~wr_en));
+
+    // RAM存储初始化与写操作
+    always @(posedge clk or negedge rst_n)
+    begin
+        if(!rst_n)
+            // 复位：清空所有存储单元
+            for(ii=0; ii<DEPTH; ii=ii+1)
+                my_memory[ii] <= {(DATA_WIDTH){1'b0}};
+        else
+            // 查找匹配位置并写入数据
+            for(ii=0; ii<DEPTH; ii=ii+1)
+                if(wr_en & (ram_wr_ptr == ii))
+                    my_memory[ii] <= w_data;
+    end 
+
+    // 读数据操作
+    always @(posedge clk or negedge rst_n)
+    begin
+        if(!rst_n)
+            // 复位：输出清零
+            r_data <= {(DATA_WIDTH){1'b0}};
+        else if(rd_en)
+            // 查找匹配位置并读取数据
+            for(ii=0; ii<DEPTH; ii=ii+1)
+                if(ram_rd_ptr == ii)
+                    r_data <= my_memory[ii];
+    end 
+
+    // 读数据有效标志产生逻辑
+    always @(posedge clk or negedge rst_n)
+    begin
+        if(!rst_n)
+            // 复位：无效
+            r_data_vld <= 1'b0;
+        else
+            // 延迟一拍：当前周期的读操作结果在下一周期有效
+            r_data_vld <= rd_en;
+    end 
+
+endmodule
+
+```
+//-------------------------------------------------------
+
+
+```verilog
+// FIFO模块的测试平台（Testbench）
+module tb;
+
+    // 调试控制变量
+    int fsdbDump;        // 控制是否生成FSDB波形文件（0=不生成，1=生成）
+    integer seed;        // 随机数生成种子
+
+    // 时钟和复位信号
+    logic clk;           // 主时钟信号
+    logic rst_n;         // 异步低电平有效复位信号
+
+    // 数据队列：存储写入/读取的值用于后续验证
+    logic [4:0] wr_array[$];  // 写入FIFO的数据队列
+    logic [4:0] rd_array[$];  // 从FIFO读取的数据队列
+
+    // FIFO接口信号
+    logic wr_en;              // 写使能信号
+    logic rd_en;              // 读使能信号
+    logic [4:0] w_data;       // 写入数据（5位宽）
+    wire [4:0] r_data;        // 读出数据（5位宽）
+    wire r_data_vld;          // 读出数据有效标志
+
+    // FIFO状态信号
+    wire almost_full;         // 几乎满标志
+    wire almost_empty;        // 几乎空标志
+    wire full;                // 满标志
+    wire empty;               // 空标志
+    logic sample_full;        // 采样时钟沿时的满状态
+    logic sample_empty;       // 采样时钟沿时的空状态
+
+    // 计数器和文件处理
+    integer wr_cnt = 0;        // 写入数据计数
+    integer rd_cnt = 0;        // 读取数据计数
+    integer cnt;              // 通用循环计数器
+    int file1, file2;          // 文件句柄（用于写入/读取数据保存）
+
+    // 初始化块：设置时间格式、随机种子和波形记录
+    initial $timeformat(-9, 3, " ns", 0);  // 设置时间格式（纳秒，保留3位小数）
+    initial begin
+        // 获取命令行种子参数，默认100
+        if(!$value$plusargs("seed=%d", seed)) seed = 100;
+        $srandom(seed);  // 初始化随机种子
+        $display("seed=%d\n", seed);
+        
+        // 获取命令行波形记录参数，默认1（启用）
+        if(!$value$plusargs("fsdbDump=%d", fsdbDump)) fsdbDump = 1;
+        if(fsdbDump) begin
+            $fsdbDumpfile("tb.fsdb");          // 创建波形文件
+            $fsdbDumpvars(0);                  // 记录所有变量
+            $fsdbDumpMDA(tb.u_tst.my_memory);  // 记录FIFO存储内容
+        end
+    end
+
+    // 时钟生成：40MHz时钟信号
+    initial begin
+        clk = 1'b0;
+        forever #(1e9/(2.0 * 40e6)) clk = ~clk;  // 计算半周期时间（12.5ns）
+    end
+
+    // 复位信号控制
+    initial begin
+        rst_n = 0;     // 初始复位有效
+        #30 rst_n = 1; // 30ns后释放复位
+    end
+
+    // 主测试逻辑
+    initial begin
+        // 初始化信号
+        wr_en = 0;
+        rd_en = 0;
+        w_data = 0;
+        sample_full = 0;
+        sample_empty = 0;
+        
+        @(posedge rst_n);  // 等待复位释放
+        
+        repeat(10000) begin  // 执行10000个测试周期
+            @(posedge clk);  // 等待时钟上升沿
+            
+            // 采样FIFO状态（用于决策）
+            sample_full = full;
+            sample_empty = empty;
+            
+            // 保存有效的读取数据
+            if(r_data_vld) begin
+                rd_array[rd_cnt] = r_data;
+                rd_cnt = rd_cnt + 1;
+            end
+            
+            #1;  // 小延迟避免竞争条件
+            
+            wr_en = 0;  // 默认关闭写使能
+            
+            // 清除前一周期的读使能
+            if(rd_en) rd_en = 0;
+            
+            // 随机生成读写使能（50%概率）
+            wr_en = {$random(seed)} % 2;
+            rd_en = {$random(seed)} % 2;
+            
+            // 写操作处理（FIFO非满时）
+            if((~sample_full) & wr_en) begin
+                wr_array[wr_cnt] = {$random(seed)} % 32;  // 生成0-31的随机数
+                w_data = wr_array[wr_cnt];
+                wr_cnt = wr_cnt + 1;
+            end
+            else begin
+                wr_en = 0;  // 禁止无效写入
+            end
+            
+            // 读操作处理（FIFO非空时）
+            if(~((~sample_empty) & rd_en)) begin
+                rd_en = 0;  // 禁止无效读取
+            end
+        end
+        
+        // 测试结束：验证数据一致性
+        file1 = $fopen("wr_fifo.txt", "w");  // 打开写入数据记录文件
+        file2 = $fopen("rd_fifo.txt", "w");  // 打开读取数据记录文件
+        
+        // 遍历所有读取的数据点
+        for(cnt = 0; cnt < rd_cnt; cnt++) begin
+            // 检查写入/读取数据是否一致
+            if(rd_array[cnt] != wr_array[cnt])
+                $display("Data mismatch at address: %d", cnt);  // 报告错误位置
+            
+            // 将数据写入文件
+            $fdisplay(file1, "%x", wr_array[cnt]);  // 写入数据
+            $fdisplay(file2, "%x", rd_array[cnt]);  // 读取数据
+        end
+        
+        $fclose(file1);
+        $fclose(file2);
+        $finish;  // 结束仿真
+    end
+
+    // FIFO模块实例化
+    tst #(
+        .DEPTH_WIDTH(4),   // FIFO地址宽度（深度=16）
+        .DEPTH(16),        // FIFO实际深度
+        .DATA_WIDTH(8)     // FIFO数据位宽
+    ) u_tst (
+        .clk(clk),
+        .rst_n(rst_n),
+        
+        // 数据接口
+        .wr_en(wr_en),
+        .rd_en(rd_en),
+        .w_data(w_data),       // 注意：测试数据是5位，但FIFO使用8位（高位补0）
+        .r_data(r_data),
+        .r_data_vld(r_data_vld),
+        
+        // 可配置阈值
+        .cfg_almost_full(6),   // 几乎满阈值：6个数据
+        .cfg_almost_empty(2),  // 几乎空阈值：2个数据
+        
+        // 状态输出
+        .almost_full(almost_full),
+        .almost_empty(almost_empty),
+        .full(full),
+        .empty(empty),
+        .fifo_num()             // FIFO中当前数据数量（未连接）
+    );
+
+endmodule
+```
+
+![example picture](/images/fifo2.png)
