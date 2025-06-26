@@ -789,7 +789,7 @@ endmodule
 
 还有一些实例暂时还未复刻，等复刻之后再进行补充。
 
-## 3 具体目标狱程序设计
+## 3 具体目标与程序设计
 
 ### 3.1 FIFO
 
@@ -1360,3 +1360,41 @@ endmodule
 ![example picture](/images/fifo2.png)
 
 通过输入随机生成的数来进行读取输出，可以看到，输入某个数值之后经过一定的时间系统会自动输出。
+
+
+#### 3.2.4 遇到的问题
+
+编写代码时也出现一些问题：
+
+1.首先是full和empty，如果只用这两个作为空满标志位的话会出现部分数据丢失的情况，因为读取的时间是和时钟信号有关的，比如当出现满的标志时，由于时钟还未到下个周期，就导致之前的数据可能会在未被读取的情况下被覆盖，导致无法读取，因此设计了almost_full和almost_empty，可以一定程度上防止出现这种问题。
+
+2.数据储存问题。这次的数据储存采用的是：
+```verilog
+$fsdbDumpMDA(tb.u_tst.my_memory);
+```
+一开始我使用的是
+```verilog
+$fsdbDumpMDA("tb.u_tst.my_memory");
+```
+因为参考的历程就是用的该代码，但是结果报错，错误为：
+```verilog
+*Verdi* ERROR: The #3 argument(my_memory) is invalid
+*Verdi* ERROR: Syntax - $fsdbDumpMDA([depth,][instance][,option]*);	: tb_tst.v(48)
+```
+该错误大致意思是$fsdbDumpMDA的第三个参数my_memory无效。通常是因为在指定实例tb.u_tst中找不到名为my_memory的信号，或者该信号不是多维数组。因此先尝试对该语句进行修改，比如改为
+```verilog
+$fsdbDumpMDA(0, "tb.u_tst.my_memory");
+```
+或
+```verilog
+$fsdbDumpMDA(0, tb.u_tst.my_memory);
+reg [BITWID-1:0] my_memory [0:DEEP-1]; 
+```
+但是仍然显示报错，应该错误可能不出现在这个语句上，而是对my_memory的定义有问题，因此经过查询得知，本设计的相关代码为：
+```verilog
+reg [BITWID-1:0] my_memory [DEEP-1:0]; 
+```
+其采用​​降序索引，地址范围是从DEEP-1到0（高位到低位），而本设计对数据的读取是读取到一个数据之后对地址进行加1再次读取，因此应该采用升序索引，最后得出对my_memory的定义为：
+```verilog
+reg [BITWID-1:0] my_memory [0:DEEP-1];
+```
