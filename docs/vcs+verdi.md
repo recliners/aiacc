@@ -1356,4 +1356,7 @@ module tb;
 endmodule
 ```
 
+以下是实验结果：
 ![example picture](/images/fifo2.png)
+
+通过输入随机生成的数来进行读取输出，可以看到，输入某个数值之后经过一定的时间系统会自动输出。
